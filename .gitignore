@@ -13,10 +13,16 @@ build/
 
 # Chroma vector DB
 .chroma/
+data/chroma_db/
+
+# Testing
+.hypothesis/
+.pytest_cache/
 
 # IDE
 .vscode/
 .idea/
+.kiro/
 *.swp
 *.swo
 
@@ -28,3 +34,11 @@ Thumbs.db
 venv/
 .venv/
 env/
+
+# Large media files
+*.mp4
+*.pdf
+
+# Frontend
+front/2026_MAR_HACKERTHON/node_modules/
+front/2026_MAR_HACKERTHON/.git/
