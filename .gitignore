@@ -37,7 +37,9 @@ env/
 
 # Large media files
 *.mp4
-*.pdf
+
+# 크롤링 데이터 (개인정보 포함)
+lec/
 
 # Frontend
 front/2026_MAR_HACKERTHON/node_modules/
