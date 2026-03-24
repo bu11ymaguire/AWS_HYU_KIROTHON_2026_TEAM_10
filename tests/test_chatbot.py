@@ -22,7 +22,7 @@ class TestIntentEnum:
         assert Intent.RETAKE_INFO.value == "retake_info"
 
     def test_enum_has_six_members(self):
-        assert len(Intent) == 6
+        assert len(Intent) == 8
 
 
 class TestIntentRouterScheduleRecommend:
@@ -138,7 +138,7 @@ class _MockRAGPipeline:
         return _MockRAGResponse(
             answer=self._answer,
             sources=self._sources,
-            has_evidence=bool(self._sources),
+            has_evidence=True,
         )
 
 
@@ -199,11 +199,11 @@ class TestChatBotEmptyInput:
 
     def test_empty_string(self):
         bot = _make_chatbot()
-        assert bot.handle_input("") == "질문을 입력해주세요"
+        assert bot.handle_input("") == "질문을 입력해주세요."
 
     def test_whitespace_only(self):
         bot = _make_chatbot()
-        assert bot.handle_input("   ") == "질문을 입력해주세요"
+        assert bot.handle_input("   ") == "질문을 입력해주세요."
 
 
 class TestChatBotRegulationQA:
@@ -215,14 +215,15 @@ class TestChatBotRegulationQA:
         assert "졸업 요건은 130학점입니다." in result
 
     def test_includes_page_sources(self):
+        """RAG Q&A에서는 출처 페이지를 표시하지 않는다 (TODO 반영)."""
         sources = [
             ChunkSource(page_number=5, chunk_text="...", similarity_score=0.9),
             ChunkSource(page_number=10, chunk_text="...", similarity_score=0.8),
         ]
         bot = _make_chatbot(rag=_MockRAGPipeline(answer="답변", sources=sources))
         result = bot.handle_input("교양 필수 과목 알려줘")
-        assert "페이지 5" in result
-        assert "페이지" in result
+        # 출처 페이지 표시가 제거되었으므로 답변만 반환
+        assert result == "답변"
 
     def test_rag_error_returns_error_message(self):
         bot = _make_chatbot(rag=_ErrorRAGPipeline())
@@ -293,14 +294,26 @@ class TestChatBotRetakeInfo:
 
 
 class TestChatBotScheduleRecommend:
-    """시간표 추천 핸들러 테스트."""
+    """시간표 추천 핸들러 테스트 — 멀티턴 대화."""
 
     def test_returns_info_collection_message(self):
         bot = _make_chatbot()
         result = bot.handle_input("시간표 추천해줘")
-        assert "학번" in result
         assert "학년" in result
+        assert "시간표 추천" in result
+
+    def test_multiturn_grade_collection(self):
+        bot = _make_chatbot()
+        bot.handle_input("시간표 추천해줘", session_id="test1")
+        result = bot.handle_input("3", session_id="test1")
+        assert "3학년" in result
         assert "학과" in result
+
+    def test_cancel_session(self):
+        bot = _make_chatbot()
+        bot.handle_input("시간표 추천해줘", session_id="test2")
+        result = bot.handle_input("취소", session_id="test2")
+        assert "취소" in result
 
 
 class TestChatBotCreditCheck:

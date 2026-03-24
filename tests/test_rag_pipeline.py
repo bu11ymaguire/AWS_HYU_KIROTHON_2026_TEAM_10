@@ -1,6 +1,6 @@
 """RAG 파이프라인 단위 테스트.
 
-외부 API(OpenAI) 호출 없이 RAG 파이프라인의 핵심 로직을 검증한다.
+외부 API 호출 없이 RAG 파이프라인의 핵심 로직을 검증한다.
 임베딩과 LLM은 모킹하여 청크 분할, 메타데이터 보존, 응답 구조를 테스트한다.
 """
 
@@ -50,29 +50,29 @@ def sample_pages():
 class TestRAGPipelineInit:
     """RAGPipeline 초기화 테스트."""
 
-    @patch("src.rag_pipeline.OpenAIEmbeddings")
-    @patch("src.rag_pipeline.ChatOpenAI")
+    @patch("src.rag_pipeline.HuggingFaceEmbeddings")
+    @patch("src.rag_pipeline.ChatGoogleGenerativeAI")
     def test_init_creates_instance(self, mock_llm, mock_embeddings, temp_db_path):
         """RAGPipeline 인스턴스가 정상적으로 생성된다."""
-        pipeline = RAGPipeline(vector_db_path=temp_db_path, llm_model="gpt-4o")
+        pipeline = RAGPipeline(vector_db_path=temp_db_path, llm_model="gemini-2.5-flash")
         assert pipeline._vector_db_path == temp_db_path
-        assert pipeline._llm_model == "gpt-4o"
+        assert pipeline._llm_model == "gemini-2.5-flash"
         assert pipeline._vectorstore is None
 
-    @patch("src.rag_pipeline.OpenAIEmbeddings")
-    @patch("src.rag_pipeline.ChatOpenAI")
+    @patch("src.rag_pipeline.HuggingFaceEmbeddings")
+    @patch("src.rag_pipeline.ChatGoogleGenerativeAI")
     def test_init_default_model(self, mock_llm, mock_embeddings, temp_db_path):
-        """기본 LLM 모델이 gpt-4o로 설정된다."""
+        """기본 LLM 모델이 gemini-2.5-flash로 설정된다."""
         pipeline = RAGPipeline(vector_db_path=temp_db_path)
-        assert pipeline._llm_model == "gpt-4o"
+        assert pipeline._llm_model == "gemini-2.5-flash"
 
 
 class TestRAGPipelineIndex:
     """RAGPipeline.index() 테스트."""
 
     @patch("src.rag_pipeline.Chroma")
-    @patch("src.rag_pipeline.OpenAIEmbeddings")
-    @patch("src.rag_pipeline.ChatOpenAI")
+    @patch("src.rag_pipeline.HuggingFaceEmbeddings")
+    @patch("src.rag_pipeline.ChatGoogleGenerativeAI")
     def test_index_creates_documents_with_page_metadata(
         self, mock_llm, mock_embeddings, mock_chroma, temp_db_path, sample_pages
     ):
@@ -94,8 +94,8 @@ class TestRAGPipelineIndex:
             assert doc.metadata["source"] == "data.md"
 
     @patch("src.rag_pipeline.Chroma")
-    @patch("src.rag_pipeline.OpenAIEmbeddings")
-    @patch("src.rag_pipeline.ChatOpenAI")
+    @patch("src.rag_pipeline.HuggingFaceEmbeddings")
+    @patch("src.rag_pipeline.ChatGoogleGenerativeAI")
     def test_index_empty_pages(
         self, mock_llm, mock_embeddings, mock_chroma_cls, temp_db_path
     ):
@@ -107,8 +107,8 @@ class TestRAGPipelineIndex:
         mock_chroma_cls.from_documents.assert_not_called()
 
     @patch("src.rag_pipeline.Chroma")
-    @patch("src.rag_pipeline.OpenAIEmbeddings")
-    @patch("src.rag_pipeline.ChatOpenAI")
+    @patch("src.rag_pipeline.HuggingFaceEmbeddings")
+    @patch("src.rag_pipeline.ChatGoogleGenerativeAI")
     def test_index_skips_empty_content_pages(
         self, mock_llm, mock_embeddings, mock_chroma, temp_db_path
     ):
@@ -137,8 +137,8 @@ class TestRAGPipelineIndex:
 class TestRAGPipelineQuery:
     """RAGPipeline.query() 테스트."""
 
-    @patch("src.rag_pipeline.OpenAIEmbeddings")
-    @patch("src.rag_pipeline.ChatOpenAI")
+    @patch("src.rag_pipeline.HuggingFaceEmbeddings")
+    @patch("src.rag_pipeline.ChatGoogleGenerativeAI")
     def test_query_without_index_returns_no_evidence(
         self, mock_llm, mock_embeddings, temp_db_path
     ):
@@ -151,8 +151,8 @@ class TestRAGPipelineQuery:
         assert result.sources == []
         assert result.has_evidence is False
 
-    @patch("src.rag_pipeline.OpenAIEmbeddings")
-    @patch("src.rag_pipeline.ChatOpenAI")
+    @patch("src.rag_pipeline.HuggingFaceEmbeddings")
+    @patch("src.rag_pipeline.ChatGoogleGenerativeAI")
     def test_query_no_relevant_results_returns_no_evidence(
         self, mock_llm_cls, mock_embeddings, temp_db_path
     ):
@@ -169,8 +169,8 @@ class TestRAGPipelineQuery:
         assert result.has_evidence is False
         assert result.sources == []
 
-    @patch("src.rag_pipeline.OpenAIEmbeddings")
-    @patch("src.rag_pipeline.ChatOpenAI")
+    @patch("src.rag_pipeline.HuggingFaceEmbeddings")
+    @patch("src.rag_pipeline.ChatGoogleGenerativeAI")
     def test_query_with_relevant_results_returns_answer(
         self, mock_llm_cls, mock_embeddings, temp_db_path
     ):
@@ -207,8 +207,8 @@ class TestRAGPipelineQuery:
         assert result.sources[0].page_number == 1
         assert result.sources[0].similarity_score == 0.85
 
-    @patch("src.rag_pipeline.OpenAIEmbeddings")
-    @patch("src.rag_pipeline.ChatOpenAI")
+    @patch("src.rag_pipeline.HuggingFaceEmbeddings")
+    @patch("src.rag_pipeline.ChatGoogleGenerativeAI")
     def test_query_sources_contain_page_numbers(
         self, mock_llm_cls, mock_embeddings, temp_db_path
     ):
@@ -225,17 +225,11 @@ class TestRAGPipelineQuery:
         mock_vectorstore = MagicMock()
         mock_vectorstore.similarity_search_with_relevance_scores.return_value = [
             (
-                Document(
-                    page_content="페이지 5 내용",
-                    metadata={"page_number": 5},
-                ),
+                Document(page_content="페이지 5 내용", metadata={"page_number": 5}),
                 0.9,
             ),
             (
-                Document(
-                    page_content="페이지 12 내용",
-                    metadata={"page_number": 12},
-                ),
+                Document(page_content="페이지 12 내용", metadata={"page_number": 12}),
                 0.7,
             ),
         ]
@@ -247,8 +241,8 @@ class TestRAGPipelineQuery:
         assert 5 in page_numbers
         assert 12 in page_numbers
 
-    @patch("src.rag_pipeline.OpenAIEmbeddings")
-    @patch("src.rag_pipeline.ChatOpenAI")
+    @patch("src.rag_pipeline.HuggingFaceEmbeddings")
+    @patch("src.rag_pipeline.ChatGoogleGenerativeAI")
     def test_query_filters_low_relevance_results(
         self, mock_llm_cls, mock_embeddings, temp_db_path
     ):
@@ -260,10 +254,7 @@ class TestRAGPipelineQuery:
         mock_vectorstore = MagicMock()
         mock_vectorstore.similarity_search_with_relevance_scores.return_value = [
             (
-                Document(
-                    page_content="관련 없는 내용",
-                    metadata={"page_number": 1},
-                ),
+                Document(page_content="관련 없는 내용", metadata={"page_number": 1}),
                 0.1,
             ),
         ]
@@ -274,8 +265,8 @@ class TestRAGPipelineQuery:
         assert result.answer == _NO_EVIDENCE_ANSWER
         assert result.has_evidence is False
 
-    @patch("src.rag_pipeline.OpenAIEmbeddings")
-    @patch("src.rag_pipeline.ChatOpenAI")
+    @patch("src.rag_pipeline.HuggingFaceEmbeddings")
+    @patch("src.rag_pipeline.ChatGoogleGenerativeAI")
     def test_query_llm_returns_no_evidence_text(
         self, mock_llm_cls, mock_embeddings, temp_db_path
     ):
@@ -294,10 +285,7 @@ class TestRAGPipelineQuery:
         mock_vectorstore = MagicMock()
         mock_vectorstore.similarity_search_with_relevance_scores.return_value = [
             (
-                Document(
-                    page_content="일부 내용",
-                    metadata={"page_number": 1},
-                ),
+                Document(page_content="일부 내용", metadata={"page_number": 1}),
                 0.5,
             ),
         ]
