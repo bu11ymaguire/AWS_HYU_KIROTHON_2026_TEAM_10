@@ -46,6 +46,9 @@ class Course:
     is_english_only: bool
     is_ic_pbl: bool
     is_smart: bool
+    capacity: int = 0
+    rating: float = 0.0
+    review_count: int = 0
 
 
 @dataclass

@@ -120,12 +120,22 @@ def main() -> None:
         equivalent_manager=equivalent_manager,
     )
 
-    # 8. 챗봇 생성 및 실행
+    # 8. 강의 데이터 로드
+    from src.course_loader import load_sample_courses, load_from_csv
+
+    courses_csv = os.environ.get("COURSES_CSV_PATH", "lec/hanyang-sugang.csv")
+    if os.path.exists(courses_csv):
+        available_courses = load_from_csv(courses_csv)
+    else:
+        available_courses = load_sample_courses()
+
+    # 9. 챗봇 생성 및 실행
     chatbot = ChatBot(
         rag_pipeline=rag_pipeline,
         schedule_recommender=schedule_recommender,
         credit_validator=credit_validator,
         parsed_data=parsed_data,
+        available_courses=available_courses,
     )
     chatbot.run()
 

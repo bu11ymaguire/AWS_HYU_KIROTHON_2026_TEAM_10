@@ -1,14 +1,18 @@
 """RAG 파이프라인 모듈.
 
-LangChain 프레임워크 기반으로 Chroma 벡터 DB와 OpenAI 임베딩/LLM을 사용하여
+로컬 sentence-transformers 임베딩 + Google Gemini LLM으로
 학사안내 데이터에 대한 질의응답을 수행한다.
+API 키: GOOGLE_API_KEY (Google AI Studio에서 무료 발급)
 """
 
 from __future__ import annotations
 
+import os
+
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_openai import OpenAIEmbeddings, ChatOpenAI
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_community.vectorstores import Chroma
+from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_core.documents import Document
 from langchain_core.messages import HumanMessage, SystemMessage
 
@@ -24,28 +28,35 @@ _SYSTEM_PROMPT = (
 
 _NO_EVIDENCE_ANSWER = "해당 정보를 찾을 수 없습니다"
 
-_RELEVANCE_THRESHOLD = 0.3
+_RELEVANCE_THRESHOLD = 0.15
 
 
 class RAGPipeline:
     """RAG 기반 학사 규정 Q&A 파이프라인.
 
-    Chroma 벡터 DB에 학사안내 페이지를 인덱싱하고,
-    사용자 질문에 대해 유사도 검색 후 LLM으로 답변을 생성한다.
+    임베딩: 로컬 sentence-transformers (API 키 불필요)
+    LLM: Google Gemini (무료 티어)
     """
 
-    def __init__(self, vector_db_path: str, llm_model: str = "gpt-4o") -> None:
-        """RAG 파이프라인 초기화.
-
-        Args:
-            vector_db_path: Chroma 벡터 DB 저장 경로.
-            llm_model: 사용할 OpenAI LLM 모델명.
-        """
+    def __init__(
+        self,
+        vector_db_path: str,
+        llm_model: str = "gemini-2.5-flash",
+    ) -> None:
         self._vector_db_path = vector_db_path
         self._llm_model = llm_model
 
-        self._embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
-        self._llm = ChatOpenAI(model=llm_model, temperature=0)
+        # 한국어 로컬 임베딩 — API 키 불필요
+        self._embeddings = HuggingFaceEmbeddings(
+            model_name="jhgan/ko-sroberta-multitask",
+        )
+
+        # Gemini LLM — GOOGLE_API_KEY 환경변수 필요
+        self._llm = ChatGoogleGenerativeAI(
+            model=llm_model,
+            temperature=0,
+            google_api_key=os.environ.get("GOOGLE_API_KEY", ""),
+        )
 
         self._text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=800,
@@ -56,21 +67,13 @@ class RAGPipeline:
         self._vectorstore: Chroma | None = None
 
     def index(self, pages: list[Page]) -> None:
-        """페이지를 의미 단위 청크로 분할하여 Chroma 벡터 DB에 저장한다.
-
-        각 청크에는 원본 페이지 번호 메타데이터가 포함된다.
-
-        Args:
-            pages: 인덱싱할 Page 객체 리스트.
-        """
+        """페이지를 청크로 분할하여 Chroma 벡터 DB에 저장한다."""
         documents: list[Document] = []
 
         for page in pages:
             if not page.content.strip():
                 continue
-
             chunks = self._text_splitter.split_text(page.content)
-
             for chunk in chunks:
                 doc = Document(
                     page_content=chunk,
@@ -86,6 +89,7 @@ class RAGPipeline:
                 persist_directory=self._vector_db_path,
                 embedding_function=self._embeddings,
                 collection_name="hanyang_schedule",
+                collection_metadata={"hnsw:space": "cosine"},
             )
             return
 
@@ -94,23 +98,14 @@ class RAGPipeline:
             embedding=self._embeddings,
             persist_directory=self._vector_db_path,
             collection_name="hanyang_schedule",
+            collection_metadata={"hnsw:space": "cosine"},
         )
 
     def query(self, question: str, top_k: int = 5) -> RAGResponse:
-        """질문에 대해 관련 청크를 검색하고 LLM으로 답변을 생성한다.
-
-        Args:
-            question: 사용자 질문 텍스트.
-            top_k: 검색할 유사 청크 수.
-
-        Returns:
-            RAGResponse: 답변 텍스트, 출처(페이지 번호), 근거 존재 여부.
-        """
+        """질문에 대해 관련 청크를 검색하고 Gemini로 답변을 생성한다."""
         if self._vectorstore is None:
             return RAGResponse(
-                answer=_NO_EVIDENCE_ANSWER,
-                sources=[],
-                has_evidence=False,
+                answer=_NO_EVIDENCE_ANSWER, sources=[], has_evidence=False,
             )
 
         results = self._vectorstore.similarity_search_with_relevance_scores(
@@ -118,16 +113,13 @@ class RAGPipeline:
         )
 
         relevant_results = [
-            (doc, score)
-            for doc, score in results
+            (doc, score) for doc, score in results
             if score >= _RELEVANCE_THRESHOLD
         ]
 
         if not relevant_results:
             return RAGResponse(
-                answer=_NO_EVIDENCE_ANSWER,
-                sources=[],
-                has_evidence=False,
+                answer=_NO_EVIDENCE_ANSWER, sources=[], has_evidence=False,
             )
 
         sources: list[ChunkSource] = []
@@ -166,7 +158,5 @@ class RAGPipeline:
         has_evidence = _NO_EVIDENCE_ANSWER not in answer
 
         return RAGResponse(
-            answer=answer,
-            sources=sources,
-            has_evidence=has_evidence,
+            answer=answer, sources=sources, has_evidence=has_evidence,
         )
